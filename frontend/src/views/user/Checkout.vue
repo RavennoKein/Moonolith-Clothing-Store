@@ -5,7 +5,7 @@ import api from '@/services/api';
 import { useCart } from '@/composables/useCart';
 import {
   MapPin, Loader2, CreditCard, Smartphone, Building2,
-  Store, QrCode, Truck, User, Phone, CheckCircle2, ChevronRight
+  Store, QrCode, Truck, User, Phone, CheckCircle2, ChevronRight, XCircle
 } from 'lucide-vue-next';
 
 const router = useRouter();
@@ -23,6 +23,7 @@ const isSavingAddress = ref(false);
 const isCalculatingShipping = ref(false);
 const currentShippingCost = ref(0);
 const selectedPaymentMethod = ref('');
+const isDirectBuy = ref(false);
 
 const paymentMethods = [
   { id: 'gopay', name: 'GoPay', type: 'E-Wallet', icon: Smartphone, group: 'ewallet' },
@@ -49,18 +50,30 @@ const addressForm = reactive({
 
 const formatRupiah = (number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 
-const getFlashSaleInfo = (item) => {
-  if (item.price !== undefined && item.name !== undefined) {
+const getPriceInfo = (item) => {
+  if (isDirectBuy.value) {
+    if (item.is_flashsale) {
+      return {
+        price: parseFloat(item.flash_price),
+        original_price: parseFloat(item.price)
+      };
+    }
     return {
-      is_active: item.is_flashsale || false,
-      price: parseFloat(item.flash_price || item.price),
+      price: parseFloat(item.price),
       original_price: parseFloat(item.price)
     };
+  } else {
+    if (item.price !== undefined && item.name !== undefined) {
+      return {
+        price: parseFloat(item.flash_price || item.price),
+        original_price: parseFloat(item.price)
+      };
+    }
+    const flashSale = item.variant?.item?.flash_sale_items?.[0];
+    return flashSale
+      ? { price: flashSale.discount_price, original_price: item.variant.item.price }
+      : { price: item.variant?.item?.price || 0, original_price: item.variant?.item?.price || 0 };
   }
-  const flashSale = item.variant?.item?.flash_sale_items?.[0];
-  return flashSale
-    ? { is_active: true, price: flashSale.discount_price, original_price: item.variant.item.price }
-    : { is_active: false, price: item.variant?.item?.price || 0, original_price: item.variant?.item?.price || 0 };
 };
 
 const fetchShippingCost = async (cityName) => {
@@ -80,6 +93,38 @@ const fetchCart = async () => {
       cartItems.value = res.data.data.items || [];
     }
   } catch (e) { console.error(e) } finally { isLoading.value = false }
+};
+
+const loadCheckoutItems = () => {
+  const directData = localStorage.getItem('direct_buy_data');
+
+  if (directData) {
+    isDirectBuy.value = true;
+    try {
+      const parsedData = JSON.parse(directData);
+
+      cartItems.value = parsedData.map(item => ({
+        cart_item_id: `direct-${item.variant_id}`,
+        variant_id: item.variant_id,
+        name: item.product_name,
+        image: item.product_image,
+        size: item.size,
+        color: item.color,
+        quantity: item.quantity,
+        price: item.original_price || item.price,
+        flash_price: item.price,
+        is_flashsale: item.is_flash_sale || false
+      }));
+      isLoading.value = false;
+    } catch (e) {
+      console.error("Gagal parse direct buy data", e);
+      localStorage.removeItem('direct_buy_data');
+      fetchCart();
+    }
+  } else {
+    isDirectBuy.value = false;
+    fetchCart();
+  }
 };
 
 const fetchAddress = async () => {
@@ -121,14 +166,17 @@ onUnmounted(() => {
 const summary = computed(() => {
   let grossTotal = 0, subtotal = 0;
   cartItems.value.forEach(item => {
-    const info = getFlashSaleInfo(item);
+    const info = getPriceInfo(item);
     const qty = parseInt(item.quantity);
     grossTotal += (info.original_price * qty);
     subtotal += (info.price * qty);
   });
   return {
-    grossTotal, subtotal, shipping: currentShippingCost.value,
-    discount: grossTotal - subtotal, total: subtotal + currentShippingCost.value
+    grossTotal,
+    subtotal,
+    shipping: currentShippingCost.value,
+    discount: grossTotal - subtotal,
+    total: subtotal + currentShippingCost.value
   };
 });
 
@@ -140,8 +188,8 @@ const handlePayment = async () => {
   isProcessing.value = true;
   try {
     const payload = {
-      full_name: addressForm.name,      
-      phone_number: addressForm.phone_number, 
+      full_name: addressForm.name,
+      phone_number: addressForm.phone_number,
       address: addressForm.address,
       city: addressForm.city,
       province: addressForm.province,
@@ -149,15 +197,25 @@ const handlePayment = async () => {
       payment_method: selectedPaymentMethod.value,
     };
 
+    if (isDirectBuy.value) {
+      payload.items = cartItems.value.map(item => ({
+        variant_id: item.variant_id,
+        quantity: item.quantity
+      }));
+      payload.is_direct_buy = true;
+    }
+
     const res = await api.post('/user/checkout', payload);
 
     if (res.data.success && res.data.snap_token) {
       window.snap.pay(res.data.snap_token, {
         onSuccess: (result) => {
+          if (isDirectBuy.value) localStorage.removeItem('direct_buy_data');
           router.push({ name: 'Invoice', params: { invoice: res.data.invoice } });
           fetchCartCount();
         },
         onPending: (result) => {
+          if (isDirectBuy.value) localStorage.removeItem('direct_buy_data');
           router.push({ name: 'Invoice', params: { invoice: res.data.invoice } });
           fetchCartCount();
         },
@@ -165,6 +223,7 @@ const handlePayment = async () => {
           alert("Pembayaran Gagal");
         },
         onClose: () => {
+          if (isDirectBuy.value) localStorage.removeItem('direct_buy_data');
           alert('Anda menutup popup pembayaran. Pesanan menunggu pembayaran.');
           router.push({ name: 'Invoice', params: { invoice: res.data.invoice } });
           fetchCartCount();
@@ -172,14 +231,23 @@ const handlePayment = async () => {
       });
     }
   } catch (error) {
-    alert(error.response?.data?.message || 'Error Checkout');
+    console.error(error);
+    const errorMsg = error.response?.data?.message || 'Error Checkout';
+    alert(errorMsg);
   } finally {
     isProcessing.value = false;
   }
 };
 
-onMounted(() => {
+const clearDirectBuy = () => {
+  localStorage.removeItem('direct_buy_data');
+  isDirectBuy.value = false;
+  isLoading.value = true;
   fetchCart();
+};
+
+onMounted(() => {
+  loadCheckoutItems();
   fetchAddress();
   const script = document.createElement('script');
   script.src = SNAP_SCRIPT_URL;
@@ -192,9 +260,26 @@ onMounted(() => {
   <div class="min-h-screen bg-[#f8f9fa] py-12 px-4 font-sans text-slate-800">
     <div class="max-w-7xl mx-auto">
 
+      <div v-if="isDirectBuy && !isLoading"
+        class="mb-6 bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-indigo-100 rounded-full text-indigo-600">
+            <CheckCircle2 class="w-5 h-5" />
+          </div>
+          <div>
+            <p class="font-bold text-indigo-900 text-sm">Mode Beli Langsung (Direct Buy)</p>
+            <p class="text-xs text-indigo-600">Anda sedang checkout produk yang dipilih langsung.</p>
+          </div>
+        </div>
+        <button @click="clearDirectBuy"
+          class="text-xs font-bold text-indigo-500 hover:text-indigo-700 underline flex items-center gap-1">
+          <XCircle class="w-4 h-4" /> Batal & Lihat Keranjang
+        </button>
+      </div>
+
       <div v-if="isLoading" class="flex flex-col items-center justify-center py-32 space-y-4">
         <Loader2 class="animate-spin text-blue-600 w-12 h-12" />
-        <p class="text-slate-500 font-medium">Memuat data keranjang...</p>
+        <p class="text-slate-500 font-medium">Memuat data pesanan...</p>
       </div>
 
       <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -333,8 +418,13 @@ onMounted(() => {
                   <div class="flex justify-between items-start">
                     <div>
                       <h3 class="font-semibold text-slate-900 line-clamp-2">{{ item.name }}</h3>
-                      <p class="text-sm text-slate-500 mt-1">Ukuran: {{ item.size }} <span class="mx-1">•</span> Qty: {{
-                        item.quantity }}</p>
+                      <p class="text-sm text-slate-500 mt-1">Ukuran: {{ item.size }} </p>
+                      <span class="flex items-center gap-1 capitalize mt-1">
+                        <span class="w-2 h-2 rounded-full border border-slate-200 shadow-sm"
+                          :style="{ backgroundColor: item.color }"></span>
+                        <p class="text-sm text-slate-500">{{ item.color }} <span class="mx-1">•</span> Qty: {{
+                          item.quantity }}</p>
+                      </span>
                     </div>
                     <div class="text-right">
                       <div v-if="item.is_flashsale">

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import Navbar from '@/components/Navbar.vue';
 import Footer from '@/components/Footer.vue';
@@ -16,6 +16,7 @@ const loading = ref(true);
 const processingId = ref(null);
 const isCheckingOut = ref(false);
 const { fetchCartCount } = useCart();
+const flashSaleDetails = ref([]); 
 
 const formatRupiah = (number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -24,7 +25,6 @@ const formatRupiah = (number) => {
     minimumFractionDigits: 0
   }).format(number);
 };
-
 
 const fetchCart = async () => {
   try {
@@ -35,12 +35,64 @@ const fetchCart = async () => {
   }
 };
 
+const fetchFlashSaleData = async () => {
+  try {
+    const res = await api.get('/public/flash-sale');
+    if (!res.data.data) return;
+
+    const flashSaleId = res.data.data.id;
+    const detail = await api.get(`/public/flash-sale/${flashSaleId}`);
+
+    flashSaleDetails.value = detail.data.data.items.map(item => ({
+      id: item.id,
+      discount_price: item.discount_price,
+      stock: item.flash_sale_stock,
+      sold: item.sold_count,
+      remaining: item.flash_sale_stock - item.sold_count
+    }));
+
+  } catch (e) {
+    console.error("Error fetching flash sale info:", e);
+  }
+};
+
 const fetchRecommendations = async () => {
   try {
+    loading.value = true;
+    
+    await fetchFlashSaleData();
     const response = await api.get('/public/items');
-    recommendations.value = response.data.data
+    
+    const randomItems = response.data.data
       .sort(() => 0.5 - Math.random())
       .slice(0, 4);
+
+    recommendations.value = randomItems.map(item => {
+      const flashItem = flashSaleDetails.value.find(fs => fs.id === item.id);
+
+      if (flashItem) {
+        return {
+          ...item,
+          price: item.price,
+          isFlashSaleSoldOut: flashItem.remaining <= 0,
+          isGlobalSoldOut: item.total_stock <= 0,
+          flash_sale: {
+            discount_price: flashItem.discount_price,
+            stock: flashItem.stock,
+            sold: flashItem.sold,
+            remaining: flashItem.remaining
+          }
+        };
+      }
+
+      return {
+        ...item,
+        flash_sale: null,
+        isFlashSaleSoldOut: false,
+        isGlobalSoldOut: item.total_stock <= 0
+      };
+    });
+
   } catch (error) {
     console.error("Gagal memuat rekomendasi:", error);
   } finally {
@@ -50,20 +102,14 @@ const fetchRecommendations = async () => {
 
 const updateQuantity = async (itemId, currentQty, change, maxStock) => {
   const newQty = currentQty + change;
-
   if (newQty < 1) return;
   if (newQty > maxStock) {
     Swal.fire('Stok Terbatas', 'Jumlah melebihi stok yang tersedia', 'warning');
     return;
   }
-
   processingId.value = itemId;
-
   try {
-    await api.put(`/user/cart/item/${itemId}`, {
-      quantity: newQty
-    });
-
+    await api.put(`/user/cart/item/${itemId}`, { quantity: newQty });
     await fetchCart();
   } catch (error) {
     Swal.fire('Gagal', error.response?.data?.message || 'Gagal mengupdate keranjang', 'error');
@@ -103,7 +149,6 @@ const handleCheckout = async () => {
   isCheckingOut.value = true;
   try {
     await api.post('/user/cart/validate');
-
     router.push('/checkout');
   } catch (error) {
     Swal.fire({
@@ -137,7 +182,7 @@ onMounted(() => {
     </div>
 
     <main class="max-w-7xl mx-auto px-4 pb-24">
-      <div v-if="loading" class="flex justify-center py-20">
+      <div v-if="loading && !cartData" class="flex justify-center py-20">
         <Loader2 class="w-10 h-10 animate-spin text-blue-600" />
       </div>
 
@@ -147,7 +192,6 @@ onMounted(() => {
           <div class="absolute inset-0 bg-blue-100 rounded-full blur-2xl opacity-50"></div>
           <ShoppingBag class="w-32 h-32 text-slate-200 relative z-10" />
         </div>
-
         <h2 class="text-2xl font-bold text-slate-800 mb-2">Opps!</h2>
         <p class="text-slate-500 mb-8 text-center max-w-xs">
           Keranjang masih kosong nih, yuk belanja sekarang!
@@ -160,7 +204,6 @@ onMounted(() => {
       </div>
 
       <div v-else class="flex flex-col lg:flex-row gap-8">
-
         <div class="flex-1 space-y-4">
           <div v-for="item in cartData.items" :key="item.cart_item_id"
             class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex gap-4 transition-all hover:border-blue-100 group relative overflow-hidden">
@@ -192,7 +235,7 @@ onMounted(() => {
                   class="flex items-center gap-2 mt-2 text-xs font-medium text-slate-500 bg-slate-50 w-fit px-2 py-1 rounded-md border border-slate-100">
                   <span>{{ item.size }}</span>
                   <span class="w-1 h-1 bg-slate-300 rounded-full"></span>
-                  <span class="flex items-center gap-1">
+                  <span class="flex items-center gap-1 capitalize">
                     <span class="w-3 h-3 rounded-full border border-slate-200 shadow-sm"
                       :style="{ backgroundColor: item.color }"></span>
                     {{ item.color }}
@@ -261,7 +304,7 @@ onMounted(() => {
             </div>
 
             <button @click="handleCheckout" :disabled="isCheckingOut || processingId !== null"
-              class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-700/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex justify-center items-center gap-2">
+              class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-700/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex justify-center items-center gap-2 cursor-pointer">
               <Loader2 v-if="isCheckingOut" class="w-5 h-5 animate-spin" />
               <span v-else>Checkout ({{ cartData.total_quantity }})</span>
             </button>
@@ -274,8 +317,13 @@ onMounted(() => {
       </div>
 
       <section class="mt-20 border-t border-slate-200 pt-12">
-        <h2 class="text-xl md:text-2xl font-bold text-slate-900 mb-6">Rekomendasi Produk Lainnya</h2>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <h2 class="text-xl md:text-2xl font-bold text-slate-900 mb-6">Mungkin Kamu Suka</h2>
+        
+        <div v-if="loading" class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+             <div v-for="i in 4" :key="i" class="h-64 bg-slate-200 rounded-xl animate-pulse"></div>
+        </div>
+
+        <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           <ProductCard v-for="rec in recommendations" :key="rec.id" :product="rec" />
         </div>
       </section>

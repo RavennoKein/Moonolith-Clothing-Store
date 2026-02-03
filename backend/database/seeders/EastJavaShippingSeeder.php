@@ -15,7 +15,7 @@ class EastJavaShippingSeeder extends Seeder
             ['origin_city' => 'Mojokerto', 'destination_city' => 'Malang', 'cost' => 18000],
             ['origin_city' => 'Mojokerto', 'destination_city' => 'Kediri', 'cost' => 18000],
             ['origin_city' => 'Mojokerto', 'destination_city' => 'Blitar', 'cost' => 18000],
-            ['origin_city' => 'Mojokerto', 'destination_city' => 'Mojokerto', 'cost' => 10000], // asal
+            ['origin_city' => 'Mojokerto', 'destination_city' => 'Mojokerto', 'cost' => 10000], 
             ['origin_city' => 'Mojokerto', 'destination_city' => 'Madiun', 'cost' => 20000],
             ['origin_city' => 'Mojokerto', 'destination_city' => 'Pasuruan', 'cost' => 15000],
             ['origin_city' => 'Mojokerto', 'destination_city' => 'Probolinggo', 'cost' => 20000],

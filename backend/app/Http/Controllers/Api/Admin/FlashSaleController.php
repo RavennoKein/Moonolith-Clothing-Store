@@ -86,7 +86,6 @@ class FlashSaleController extends Controller
                 'description' => $validated['description'],
                 'start_time' => $validated['startTime'],
                 'end_time' => $validated['endTime'],
-                'is_permanent' => $validated['isPermanent'] ?? false,
                 'status' => 'scheduled',
             ]);
 

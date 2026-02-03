@@ -234,25 +234,6 @@ const handleSubmit = async () => {
                     class="w-full p-4 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-blue-500 transition-all bg-gray-50/50">
                 </div>
 
-                <div
-                  class="md:col-span-2 p-5 bg-linear-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 flex items-center justify-between">
-                  <div class="flex items-center gap-4">
-                    <div class="p-3 bg-white rounded-xl shadow-sm">
-                      <RefreshCw class="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <p class="font-bold text-blue-900">Ulangi Otomatis</p>
-                      <p class="text-sm text-blue-700 opacity-80">Sesi akan diperbarui otomatis setiap 48 jam</p>
-                    </div>
-                  </div>
-                  <label class="relative inline-flex items-center cursor-pointer group">
-                    <input type="checkbox" v-model="session.isPermanent" class="sr-only peer">
-
-                    <div
-                      class="w-14 h-7 bg-gray-300 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-100 peer-checked:bg-blue-600  transition-all duration-300 after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300  after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:duration-300 peer-checked:after:translate-x-7 peer-checked:after:border-white shadow-inner">
-                    </div>
-                  </label>
-                </div>
               </div>
             </section>
 

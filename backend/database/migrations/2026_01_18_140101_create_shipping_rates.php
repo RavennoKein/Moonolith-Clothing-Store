@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('shipping_rates', function (Blueprint $table) {
             $table->id();
-            $table->string('origin_city');     // Mojokerto
+            $table->string('origin_city');
             $table->string('destination_city'); 
             $table->integer('cost');
         });

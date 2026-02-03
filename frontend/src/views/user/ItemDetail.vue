@@ -319,25 +319,33 @@ const buyNow = async () => {
   isBuyingNow.value = true;
 
   try {
-    await api.post('/user/cart/add', {
+
+    const directBuyItem = {
       variant_id: selectedVariant.id,
+      quantity: quantity.value,
+      product_name: product.value.name,
+      product_image: product.value.image_url,
+      price: displayPrice.value,
+      size: selectedSize.value,
+      color: selectedColor.value,
+      stock: selectedVariant.stock,
+      original_price: product.value.price,
+      is_flash_sale: hasFlashSale.value,
       quantity: quantity.value
-    });
+    };
 
-    await fetchCartCount();
-
-    localStorage.setItem('direct_checkout_variant_id', selectedVariant.id);
+    localStorage.setItem('direct_buy_data', JSON.stringify([directBuyItem]));
 
     await new Promise(resolve => setTimeout(resolve, 500));
 
     router.push('/checkout');
 
   } catch (error) {
-    const errorMsg = error.response?.data?.message || 'Gagal memproses pembelian';
+    console.error(error);
     Swal.fire({
       icon: 'error',
       title: 'Gagal',
-      text: errorMsg,
+      text: 'Gagal memproses pembelian langsung',
       confirmButtonColor: '#0f172a'
     });
   } finally {

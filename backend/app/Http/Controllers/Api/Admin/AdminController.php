@@ -95,7 +95,6 @@ class AdminController extends Controller
             'address' => $request->address ?? $user->address,
         ];
 
-        // password hanya diupdate jika diisi
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }

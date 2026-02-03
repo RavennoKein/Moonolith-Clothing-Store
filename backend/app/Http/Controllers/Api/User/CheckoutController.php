@@ -29,18 +29,42 @@ class CheckoutController extends Controller
             'city' => 'required|string',
             'province' => 'required|string',
             'postal_code' => 'nullable|string',
+            'items' => 'nullable|array',
+            'items.*.variant_id' => 'required_with:items|exists:item_variants,id',
+            'items.*.quantity' => 'required_with:items|integer|min:1',
         ]);
 
         try {
             return DB::transaction(function () use ($request, $user) {
-                $cart = Cart::with('items.variant.item')->where('user_id', $user->id)->firstOrFail();
+                $checkoutItems = collect([]);
+                $isDirectBuy = false;
 
-                if ($cart->items->isEmpty()) {
-                    abort(422, 'Keranjang belanja kosong');
+                if ($request->has('items') && count($request->items) > 0) {
+                    $isDirectBuy = true;
+
+                    foreach ($request->items as $reqItem) {
+                        $variant = ItemVariant::with('item')->find($reqItem['variant_id']);
+
+                        $tempItem = new \stdClass();
+                        $tempItem->variant = $variant;
+                        $tempItem->variant_id = $variant->id;
+                        $tempItem->quantity = $reqItem['quantity'];
+
+                        $checkoutItems->push($tempItem);
+                    }
+
+                } else {
+                    $cart = Cart::with('items.variant.item')->where('user_id', $user->id)->firstOrFail();
+
+                    if ($cart->items->isEmpty()) {
+                        abort(422, 'Keranjang belanja kosong');
+                    }
+
+                    $checkoutItems = $cart->items;
                 }
 
                 $subtotal = 0;
-                foreach ($cart->items as $ci) {
+                foreach ($checkoutItems as $ci) {
                     $item = $ci->variant->item;
 
                     $flash = $item->flashSaleItems()
@@ -68,7 +92,7 @@ class CheckoutController extends Controller
                     'shipping_cost' => $shippingCost,
                 ]);
 
-                foreach ($cart->items as $ci) {
+                foreach ($checkoutItems as $ci) {
                     $variant = ItemVariant::lockForUpdate()->find($ci->variant_id);
 
                     if (!$variant) {
@@ -150,8 +174,12 @@ class CheckoutController extends Controller
                 $order->snap_token = $snapToken;
                 $order->save();
 
-                // Hapus Keranjang
-                $cart->items()->delete();
+                if (!$isDirectBuy) {
+                    $cart = Cart::where('user_id', $user->id)->first();
+                    if ($cart) {
+                        $cart->items()->delete();
+                    }
+                }
 
                 return response()->json([
                     'success' => true,

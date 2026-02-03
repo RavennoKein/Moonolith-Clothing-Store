@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { CheckCircle, Clock, Info, XCircle } from 'lucide-vue-next';
+import { CheckCircle, Clock, Info, XCircle, Printer, Download } from 'lucide-vue-next';
 import api from '@/services/api';
 import Swal from 'sweetalert2';
 
@@ -13,6 +13,7 @@ const orderDetails = ref(null);
 const isLoading = ref(true);
 const errorMessage = ref('');
 const isCancelling = ref(false);
+const isDownloading = ref(false); 
 
 const MIDTRANS_CLIENT_KEY = 'Mid-client-k54WL5nGvcG2Xkr8'; 
 const IS_PRODUCTION = false; 
@@ -33,6 +34,41 @@ const fetchOrder = async () => {
     errorMessage.value = "Data pesanan tidak ditemukan atau terjadi kesalahan.";
   } finally {
     isLoading.value = false;
+  }
+};
+
+const downloadInvoice = async () => {
+  isDownloading.value = true;
+  try {
+    const response = await api.get(`/user/orders/${invoiceNumber}/pdf`, {
+      responseType: 'blob'
+    });
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Invoice-${invoiceNumber}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Berhasil',
+      text: 'Invoice berhasil didownload',
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000
+    });
+
+  } catch (error) {
+    console.error("Gagal download PDF", error);
+    Swal.fire('Gagal', 'Terjadi kesalahan saat mengunduh invoice.', 'error');
+  } finally {
+    isDownloading.value = false;
   }
 };
 
@@ -169,9 +205,22 @@ const statusLabel = computed(() => {
       <div v-else class="space-y-6">
 
         <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-          <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+          <div class="p-6 border-b border-slate-100 flex justify-between items-center flex-wrap gap-2">
             <h2 class="text-xl font-bold text-slate-800">Detail Tagihan</h2>
-            <button @click="fetchOrder" class="text-xs text-blue-600 hover:underline">Refresh Status</button>
+
+            <div class="flex gap-3">
+              <button @click="downloadInvoice" :disabled="isDownloading"
+                class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200 disabled:opacity-50">
+                <Printer v-if="!isDownloading" class="w-4 h-4" />
+                <div v-else class="animate-spin w-4 h-4 border-2 border-slate-500 border-t-transparent rounded-full">
+                </div>
+                {{ isDownloading ? 'Unduh...' : 'Cetak PDF' }}
+              </button>
+
+              <button @click="fetchOrder" class="text-xs text-blue-600 hover:underline self-center">
+                Refresh Status
+              </button>
+            </div>
           </div>
 
           <div class="p-6 space-y-4">
@@ -192,7 +241,7 @@ const statusLabel = computed(() => {
               <div class="flex justify-between text-sm text-slate-600">
                 <span>Total Harga Produk</span>
                 <span>{{ formatRupiah(parseInt(orderDetails.total_price) - parseInt(orderDetails.shipping_cost || 0))
-                  }}</span>
+                }}</span>
               </div>
               <div class="flex justify-between text-sm text-slate-600">
                 <span>Total Ongkos Kirim</span>

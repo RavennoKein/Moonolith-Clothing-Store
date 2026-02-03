@@ -17,7 +17,7 @@ import api from '@/services/api';
 
 const flashSale = ref(null);
 const flashSaleProducts = ref([]);
-const products = ref([]);
+const rawProducts = ref([]); 
 const loading = ref(true);
 const isLoggedIn = ref(false);
 
@@ -31,6 +31,9 @@ onMounted(async () => {
     fetchProducts()
   ]);
   loading.value = false;
+  setTimeout(() => {
+    loading.value = false;
+  }, 300);
 });
 
 const heroImages = ref([
@@ -39,89 +42,81 @@ const heroImages = ref([
   carousel3
 ]);
 
-const fetchFlashSale = async () => {
-  try {
-    const res = await api.get('/public/flash-sales');
-
-    if (res.data.success && res.data.data) {
-      flashSaleProducts.value = [res.data.data];
-    } else {
-      flashSaleProducts.value = [];
-    }
-  } catch (err) {
-    flashSaleProducts.value = [];
-    console.error(err);
-  }
-};
-
 const fetchFlashSaleStatus = async () => {
-  const res = await api.get('/public/flash-sale');
+  try {
+    const res = await api.get('/public/flash-sale');
 
-  if (!res.data.data) {
+    if (!res.data.data) {
+      flashSale.value = null;
+      flashSaleProducts.value = [];
+      return;
+    }
+
+    flashSale.value = res.data.data;
+
+    const detail = await api.get(`/public/flash-sale/${flashSale.value.id}`);
+
+    flashSaleProducts.value = detail.data.data.items.map(item => ({
+      id: item.id, 
+      name: item.name,
+      image_url: item.image_url,
+
+      price: item.original_price,
+
+      flash_sale: {
+        discount_price: item.discount_price,
+        stock: item.flash_sale_stock,
+        sold: item.sold_count,
+        remaining: item.flash_sale_stock - item.sold_count
+      }
+    }));
+  } catch (e) {
+    console.error("Error fetching flash sale:", e);
     flashSale.value = null;
     flashSaleProducts.value = [];
-    return;
   }
-
-  flashSale.value = res.data.data;
-
-  const detail = await api.get(`/public/flash-sale/${flashSale.value.id}`);
-
-  flashSaleProducts.value = detail.data.data.items.map(item => ({
-    id: item.id,
-    name: item.name,
-    image_url: item.image_url,
-    price: item.original_price,
-    flash_sale: {
-      discount_price: item.discount_price,
-      stock: item.flash_sale_stock,
-      sold: item.sold_count,
-      remaining: item.flash_sale_stock - item.sold_count
-    }
-  }));
 };
 
 const fetchProducts = async () => {
-  const res = await api.get('/public/items');
+  try {
+    const res = await api.get('/public/items');
+    rawProducts.value = res.data.data;
+  } catch (e) {
+    console.error("Error fetching products:", e);
+  }
+};
 
-  products.value = res.data.data.map(item => {
+const products = computed(() => {
+  return rawProducts.value.map(item => {
     const flashItem = flashSaleProducts.value.find(fs => fs.id === item.id);
 
     if (flashItem) {
+      const remainingStock = flashItem.flash_sale.remaining;
+
       return {
         ...item,
-        price: flashItem.price,
+        price: item.price,
+
+        isFlashSaleSoldOut: remainingStock <= 0,
+
+        isGlobalSoldOut: item.total_stock <= 0,
+
         flash_sale: {
           discount_price: flashItem.flash_sale.discount_price,
-          remaining: flashItem.flash_sale.remaining,
           stock: flashItem.flash_sale.stock,
-          sold: flashItem.flash_sale.sold
-        },
-        created_at: item.created_at
+          sold: flashItem.flash_sale.sold,
+          remaining: remainingStock
+        }
       };
     }
 
     return {
-      id: item.id,
-      name: item.name,
-      image_url: item.image_url,
-      price: item.price,
+      ...item,
       flash_sale: null,
-      created_at: item.created_at
+      isFlashSaleSoldOut: false,
+      isGlobalSoldOut: item.total_stock <= 0
     };
   });
-};
-
-onMounted(async () => {
-  loading.value = true;
-  await Promise.all([
-    fetchFlashSaleStatus(),
-    fetchProducts()
-  ]);
-  loading.value = false;
-  setTimeout(() => {
-    loading.value = false;
-  }, 300);
 });
 
 const handleFlashSaleExpired = async () => {
@@ -132,13 +127,11 @@ const handleFlashSaleExpired = async () => {
 };
 
 const hasFlashSaleStock = computed(() => {
-  if (!Array.isArray(flashSaleProducts.value)) {
-    return false;
-  }
-
-  return flashSaleProducts.value.some(p => !p.isSoldOut);
+  if (!Array.isArray(flashSaleProducts.value)) return false;
+  return flashSaleProducts.value.some(p => p.flash_sale.remaining > 0);
 });
-const hasProducts = computed(() => products.value !== null);
+
+const hasProducts = computed(() => products.value && products.value.length > 0);
 const hasFlashSale = computed(() => flashSale.value !== null);
 
 </script>

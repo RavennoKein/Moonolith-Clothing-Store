@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { CircleUserRound, ShoppingCart, CircleStar, Search, Menu, X } from 'lucide-vue-next'; // Tambah icon X
+import { CircleUserRound, ShoppingCart, CircleStar, Search, Menu, X } from 'lucide-vue-next';
 import { useRouter, useRoute } from 'vue-router';
 import { useCart } from '@/composables/useCart';
 
@@ -19,7 +19,7 @@ const handleSearch = () => {
       name: 'Catalog',
       query: { q: searchQuery.value }
     });
-    isMobileMenuOpen.value = false; 
+    isMobileMenuOpen.value = false;
   }
 };
 
@@ -98,7 +98,7 @@ onMounted(() => {
 
         <div class="flex items-center space-x-3 md:space-x-5">
           <button @click="router.push({ name: 'Cart' })"
-            :class="['relative p-2 rounded-full transition-all group', isScrolled ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-100 text-slate-700']">
+            :class="['relative p-2 rounded-full transition-all group', isScrolled ? 'hover:text-blue-300 text-white' : 'hover:text-blue-900 text-slate-700']">
             <span v-if="cartCount > 0"
               class="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center border-2 border-slate-900 animate-bounce-short">
               {{ cartCount }}
@@ -129,9 +129,8 @@ onMounted(() => {
     </div>
 
     <transition name="slide-fade">
-      <div v-if="isMobileMenuOpen"
-        :class="['md:hidden absolute top-full left-0 w-full border-t shadow-xl flex flex-col p-4 space-y-4',
-          isScrolled ? 'bg-slate-900/95 border-blue-900/20 text-white' : 'bg-white border-slate-100 text-slate-900']">
+      <div v-if="isMobileMenuOpen" :class="['md:hidden absolute top-full left-0 w-full border-t shadow-xl flex flex-col p-4 space-y-4',
+        isScrolled ? 'bg-slate-900/95 border-blue-900/20 text-white' : 'bg-white border-slate-100 text-slate-900']">
 
         <div class="relative w-full">
           <input v-model="searchQuery" @keydown.enter="handleSearch" type="text" placeholder="Cari produk..." :class="[

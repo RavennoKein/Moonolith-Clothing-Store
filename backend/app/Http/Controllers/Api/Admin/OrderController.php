@@ -7,6 +7,7 @@ use App\Models\Order;
 use Midtrans\Transaction;
 use App\Models\ItemVariant;
 use Illuminate\Http\Request;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 
@@ -53,7 +54,7 @@ class OrderController extends Controller
             return [
                 'id' => $order->id,
                 'no_resi' => $order->invoice,
-                'name' => $order->receiver_name, // Atau $order->user->name jika ingin nama akun
+                'name' => $order->receiver_name,
                 'address' => $order->address,
                 'tanggal_beli' => $order->created_at->format('d M Y'),
                 'status' => ucfirst($order->status),
@@ -188,10 +189,10 @@ class OrderController extends Controller
 
         if ($order->status == 'pending' && empty($order->snap_token)) {
 
-            \Midtrans\Config::$serverKey = config('services.midtrans.server_key');
-            \Midtrans\Config::$isProduction = false;
-            \Midtrans\Config::$isSanitized = true;
-            \Midtrans\Config::$is3ds = true;
+            Config::$serverKey = config('services.midtrans.server_key');
+            Config::$isProduction = false;
+            Config::$isSanitized = true;
+            Config::$is3ds = true;
 
             $params = [
                 'transaction_details' => [
@@ -240,6 +241,38 @@ class OrderController extends Controller
             'status' => 'success',
             'data' => $formattedData
         ]);
+    }
+
+    public function downloadPdf($invoice)
+    {
+        $order = Order::with('items.item')->where('invoice', $invoice)->firstOrFail();
+
+        $pdf = Pdf::loadView('pdf.invoice', compact('order'));
+
+        return $pdf->download('Invoice-' . $order->invoice . '.pdf');
+    }
+
+    public function exportReport(Request $request)
+    {
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+        ]);
+
+        $startDate = $request->start_date . ' 00:00:00';
+        $endDate = $request->end_date . ' 23:59:59';
+
+        $orders = Order::with('user')
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $totalRevenue = $orders->where('status', 'done')->sum('total_amount');
+
+        $pdf = Pdf::loadView('pdf.laporan', compact('orders', 'startDate', 'endDate', 'totalRevenue'))
+            ->setPaper('a4', 'landscape');
+
+        return $pdf->download('Laporan-Penjualan.pdf');
     }
 
 }

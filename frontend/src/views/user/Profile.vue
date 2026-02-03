@@ -4,7 +4,7 @@ import Navbar from "../../components/Navbar.vue";
 import Footer from "../../components/Footer.vue";
 import {
   User, Mail, Phone, MapPin, Package, LogOut,
-  ChevronRight, Save, Edit3, ShieldCheck,
+  ChevronRight, ChevronLeft, Save, Edit3, ShieldCheck,
   Heart, Trash2, ShoppingBag, Map, Navigation,
   AlertCircle, Truck, FileText, X
 } from "lucide-vue-next";
@@ -18,6 +18,8 @@ const isEditing = ref(false);
 
 const orders = ref([]);
 const isLoadingOrders = ref(false);
+const currentPage = ref(1);
+const lastPage = ref(1);
 
 const favoriteProducts = ref([]);
 const isLoadingFav = ref(false);
@@ -25,9 +27,6 @@ const isLoadingFav = ref(false);
 const auth = useAuthStore();
 const router = useRouter();
 const saving = ref(false);
-const showDetailModal = ref(false);
-const selectedOrder = ref(null);
-
 
 const handleLogout = async () => {
   const result = await Swal.fire({
@@ -114,37 +113,26 @@ const formatPrice = (value) => {
   }).format(Number(value));
 };
 
-const checkStatus = (status, type) => {
-  if (!status) return false;
-  const s = status.toLowerCase();
-
-  if (type === 'show_invoice') {
-    return s !== 'cancelled' && s !== 'batal';
+const getStatusColor = (status) => {
+  switch (status.toLowerCase()) {
+    case 'pending': return 'bg-yellow-100 text-yellow-700';
+    case 'processing': return 'bg-blue-100 text-blue-700';
+    case 'delivered': return 'bg-purple-100 text-purple-700';
+    case 'done': return 'bg-green-100 text-green-700';
+    case 'cancelled': case 'batal': return 'bg-red-100 text-red-700';
+    default: return 'bg-slate-100 text-slate-700';
   }
-
-  if (type === 'process') return ['pending', 'processing', 'dikemas', 'dikirim'].includes(s);
-  if (type === 'done') return ['delivered', 'done', 'selesai'].includes(s);
-  if (type === 'cancel') return ['cancelled', 'batal'].includes(s);
-
-  return false;
 };
 
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return '-';
-
-  const options = { year: 'numeric', month: 'short', day: 'numeric' };
-  return date.toLocaleDateString('id-ID', options);
-};
-
-const fetchOrders = async () => {
-  if (orders.value.length > 0) return;
-
+const fetchOrders = async (page = 1) => {
   isLoadingOrders.value = true;
   try {
-    const response = await api.get('user/orders');
+    const response = await api.get(`user/orders?page=${page}`);
+
     orders.value = response.data.data;
+    currentPage.value = response.data.current_page;
+    lastPage.value = response.data.last_page;
+
   } catch (error) {
     console.error("Gagal mengambil data pesanan:", error);
   } finally {
@@ -152,19 +140,15 @@ const fetchOrders = async () => {
   }
 };
 
-const viewInvoice = (invoiceCode) => {
-  router.push({ name: 'Invoice', params: { invoice: invoiceCode } });
+const changePage = (page) => {
+  if (page >= 1 && page <= lastPage.value) {
+    fetchOrders(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 };
 
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'pending': return 'bg-yellow-100 text-yellow-700';
-    case 'processing': return 'bg-blue-100 text-blue-700';
-    case 'delivered': return 'bg-purple-100 text-purple-700';
-    case 'done': return 'bg-green-100 text-green-700';
-    case 'cancelled': return 'bg-red-100 text-red-700';
-    default: return 'bg-slate-100 text-slate-700';
-  }
+const viewInvoice = (invoiceCode) => {
+  router.push({ name: 'Invoice', params: { invoice: invoiceCode } });
 };
 
 const fetchFavorites = async () => {
@@ -202,12 +186,8 @@ const removeFromWishlist = (id) => {
         await api.post('/user/favorites/toggle', { item_id: id });
         favoriteProducts.value = favoriteProducts.value.filter(p => p.id !== id);
         Swal.fire({
-          toast: true,
-          position: 'top-end',
-          icon: 'success',
-          title: 'Item dihapus',
-          showConfirmButton: false,
-          timer: 1500
+          toast: true, position: 'top-end', icon: 'success',
+          title: 'Item dihapus', showConfirmButton: false, timer: 1500
         });
       } catch (error) {
         Swal.fire('Gagal', 'Terjadi kesalahan saat menghapus', 'error');
@@ -218,13 +198,14 @@ const removeFromWishlist = (id) => {
 
 onMounted(() => {
   fetchFavorites();
+  fetchOrders(1);
 });
 
 watch(activeTab, (newTab) => {
   if (newTab === 'favorit') {
     fetchFavorites();
   } else if (newTab === 'pesanan') {
-    fetchOrders();
+    fetchOrders(1);
   }
 });
 </script>
@@ -236,9 +217,9 @@ watch(activeTab, (newTab) => {
     <div class="h-32 bg-slate-900 w-full"></div>
 
     <main class="max-w-6xl mx-auto px-4 -mt-16 pb-20">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 relative items-start">
 
-        <aside class="lg:col-span-4 space-y-6">
+        <aside class="lg:col-span-4 space-y-6 lg:sticky lg:top-24 self-start">
           <div
             class="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white p-8 relative overflow-hidden">
             <div class="absolute -top-10 -right-10 w-32 h-32 bg-indigo-50 rounded-full blur-3xl"></div>
@@ -343,7 +324,6 @@ watch(activeTab, (newTab) => {
                   <input v-else v-model="tempProfile.name" type="text" placeholder="Masukkan nama lengkap"
                     class="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold transition-all" />
                 </div>
-
                 <div class="space-y-3">
                   <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Alamat Email</label>
                   <div v-if="!isEditing" class="flex items-center gap-3 text-slate-700 font-bold p-1">
@@ -355,7 +335,6 @@ watch(activeTab, (newTab) => {
                   <input v-else v-model="tempProfile.email" type="email" placeholder="email@contoh.com"
                     class="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold transition-all" />
                 </div>
-
                 <div class="md:col-span-2 space-y-3">
                   <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kontak
                     WhatsApp</label>
@@ -368,10 +347,8 @@ watch(activeTab, (newTab) => {
                   <input v-else v-model="tempProfile.phone_number" type="text" placeholder="08xxxxxxxx"
                     class="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold transition-all" />
                 </div>
-
                 <div class="md:col-span-2 pt-6 border-t border-slate-50">
                   <h4 class="text-sm font-black uppercase tracking-widest text-slate-900 mb-6">Detail Pengiriman</h4>
-
                   <div v-if="!isEditing" class="space-y-3">
                     <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Alamat
                       Lengkap</label>
@@ -383,16 +360,13 @@ watch(activeTab, (newTab) => {
                       <span class="mt-2">{{ fullAddressFormatted }}</span>
                     </div>
                   </div>
-
                   <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-6">
-
                     <div class="md:col-span-2 space-y-2">
                       <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Jalan / RT /
                         RW</label>
                       <textarea v-model="tempProfile.address" rows="2" placeholder="Nama Jalan, No. Rumah, RT/RW"
                         class="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold transition-all resize-none"></textarea>
                     </div>
-
                     <div class="space-y-2">
                       <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kota / Kab</label>
                       <div class="relative">
@@ -401,7 +375,6 @@ watch(activeTab, (newTab) => {
                           class="w-full pl-12 pr-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold transition-all" />
                       </div>
                     </div>
-
                     <div class="space-y-2">
                       <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Provinsi</label>
                       <div class="relative">
@@ -410,16 +383,13 @@ watch(activeTab, (newTab) => {
                           class="w-full pl-12 pr-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold transition-all" />
                       </div>
                     </div>
-
                     <div class="space-y-2">
                       <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Kode Pos</label>
                       <input v-model="tempProfile.postal_code" type="text" placeholder="60xxx"
                         class="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white rounded-2xl outline-none font-bold transition-all" />
                     </div>
-
                   </div>
                 </div>
-
               </div>
             </div>
 
@@ -499,65 +469,96 @@ watch(activeTab, (newTab) => {
               </div>
             </div>
 
-            <div v-else class="space-y-4">
-              <div v-for="order in orders" :key="order.id"
-                class="group p-6 bg-white border border-slate-100 rounded-3xl hover:shadow-xl hover:shadow-slate-200/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div v-if="activeTab === 'pesanan'" class="space-y-6">
 
-                <div class="flex items-center gap-5">
-                  <div
-                    class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-50 transition-colors shrink-0">
-                    <Package class="w-8 h-8 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+              <div v-if="isLoadingOrders" class="flex flex-col items-center justify-center py-20">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                <p class="text-slate-400 text-sm font-bold animate-pulse">Memuat pesanan...</p>
+              </div>
+
+              <div v-else>
+                <div v-if="orders.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
+                  <div class="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                    <Package class="w-10 h-10 text-slate-300" />
                   </div>
-                  <div>
-                    <p class="text-xs font-black text-indigo-600 uppercase mb-1">{{ order.no_resi }}</p>
-
-                    <p class="text-lg font-black text-slate-900 leading-none">
-                      {{ order.tanggal_beli }}
-                    </p>
-
-                    <span class="text-xs text-slate-400 font-medium mt-1 block">
-                      {{ order.daftar_barang ? order.daftar_barang.length : 0 }} Barang
-                    </span>
-                  </div>
+                  <h4 class="text-lg font-black text-slate-900 mb-2">Belum ada pesanan</h4>
+                  <p class="text-slate-400 text-sm max-w-xs mx-auto">Riwayat pembelian Anda akan muncul di sini.</p>
                 </div>
 
-                <div class="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8 w-full md:w-auto">
+                <div v-else class="space-y-4">
+                  <div v-for="order in orders" :key="order.id"
+                    class="group p-6 bg-white border border-slate-100 rounded-3xl hover:shadow-xl hover:shadow-slate-200/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-6">
 
-                  <div class="flex items-center justify-between w-full md:w-auto md:block text-left md:text-right">
-                    <div>
-                      <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Bayar</p>
-                      <p class="font-black text-slate-900 text-lg">
-                        {{ formatPrice(order.total_harga) }}
-                      </p>
+                    <div class="flex items-center gap-5">
+                      <div
+                        class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-50 transition-colors shrink-0">
+                        <Package class="w-8 h-8 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                      </div>
+                      <div>
+                        <p class="text-xs font-black text-indigo-600 uppercase mb-1">{{ order.no_resi }}</p>
+                        <p class="text-lg font-black text-slate-900 leading-none">
+                          {{ order.tanggal_beli }}
+                        </p>
+                        <span class="text-xs text-slate-400 font-medium mt-1 block">
+                          {{ order.daftar_barang ? order.daftar_barang.length : 0 }} Barang
+                        </span>
+                      </div>
                     </div>
 
-                    <div class="md:hidden mt-2">
-                      <span :class="getStatusColor(order.status.toLowerCase())"
-                        class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
-                        {{ order.status }}
-                      </span>
+                    <div class="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-8 w-full md:w-auto">
+                      <div class="flex items-center justify-between w-full md:w-auto md:block text-left md:text-right">
+                        <div>
+                          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Bayar</p>
+                          <p class="font-black text-slate-900 text-lg">
+                            {{ formatPrice(order.total_harga) }}
+                          </p>
+                        </div>
+                        <div class="md:hidden mt-2">
+                          <span :class="getStatusColor(order.status)"
+                            class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                            {{ order.status }}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div class="flex flex-col items-end gap-3 w-full md:w-auto">
+                        <span :class="getStatusColor(order.status)"
+                          class="hidden md:inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-1">
+                          {{ order.status }}
+                        </span>
+
+                        <div class="flex gap-2 w-full md:w-auto">
+                          <button
+                            v-if="order.status.toLowerCase() !== 'cancelled' && order.status.toLowerCase() !== 'batal'"
+                            @click="viewInvoice(order.no_resi)"
+                            class="flex-1 md:flex-none px-5 py-2 bg-indigo-600 text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2">
+                            <FileText class="w-4 h-4" />
+                            Invoice
+                          </button>
+                          <button v-else
+                            class="flex-1 md:flex-none px-5 py-2 bg-slate-100 text-slate-400 cursor-not-allowed rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2">
+                            <AlertCircle class="w-4 h-4" />
+                            Dibatalkan
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="flex flex-col items-end gap-3 w-full md:w-auto">
-                    <span :class="getStatusColor(order.status.toLowerCase())"
-                      class="hidden md:inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-1">
-                      {{ order.status }}
-                    </span>
-
-                    <div class="flex gap-2 w-full md:w-auto">
-                      <button
-                        v-if="order.status.toLowerCase() !== 'cancelled' && order.status.toLowerCase() !== 'batal'"
-                        @click="viewInvoice(order.no_resi)"
-                        class="flex-1 md:flex-none px-5 py-2 bg-indigo-600 text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2">
-                        <FileText class="w-4 h-4" />
-                        Invoice
+                  <div v-if="lastPage > 1" class="flex justify-center mt-8 pt-4 border-t border-slate-50">
+                    <div class="bg-white border border-slate-100 rounded-2xl p-2 flex items-center gap-2 shadow-sm">
+                      <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1"
+                        class="p-2 rounded-xl hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
+                        <ChevronLeft class="w-5 h-5 text-slate-600" />
                       </button>
 
-                      <button v-else
-                        class="flex-1 md:flex-none px-5 py-2 bg-slate-100 text-slate-400 cursor-not-allowed rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2">
-                        <AlertCircle class="w-4 h-4" />
-                        Dibatalkan
+                      <span class="px-4 text-xs font-black text-slate-900">
+                        Hal {{ currentPage }} dari {{ lastPage }}
+                      </span>
+
+                      <button @click="changePage(currentPage + 1)" :disabled="currentPage === lastPage"
+                        class="p-2 rounded-xl hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
+                        <ChevronRight class="w-5 h-5 text-slate-600" />
                       </button>
                     </div>
                   </div>

@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\User\CheckoutController;
 use App\Http\Controllers\Api\User\FavoriteController;
 use App\Http\Controllers\Api\Admin\CashflowController;
 use App\Http\Controllers\Api\Admin\CategoryController;
+use App\Http\Controllers\Api\Public\MostBuyController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use App\Http\Controllers\Api\Admin\FlashSaleController;
 use App\Http\Controllers\Api\MidtransWebhookController;
@@ -54,6 +55,7 @@ Route::middleware(['api', 'auth:sanctum', 'role:admin,super'])->prefix('admin')-
     Route::get('/orders', [OrderController::class, 'index']);
     Route::patch('/orders/{order}/status', [OrderController::class, 'updateStatus']);
     Route::get('/cashflow', [CashflowController::class, 'cashflow']);
+    Route::get('/orders/report', [OrderController::class, 'exportReport']);
 });
 
 Route::middleware(['api', 'auth:sanctum', 'role:user'])->prefix('user')->group(function () {
@@ -75,6 +77,7 @@ Route::middleware(['api', 'auth:sanctum', 'role:user'])->prefix('user')->group(f
     Route::get('/orders/{invoice}', [OrderController::class, 'showByInvoice']);
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
+    Route::get('/orders/{invoice}/pdf', [OrderController::class, 'downloadPdf']);
 });
 
 Route::prefix('public')->group(function () {
@@ -83,6 +86,7 @@ Route::prefix('public')->group(function () {
     Route::get('/items', [PublicItemController::class, 'index']);
     Route::get('/items/{id}', [PublicItemController::class, 'show']);
     Route::get('/categories', [CategoryController::class, 'index']);
+    Route::get('/most-buy', [MostBuyController::class, 'index']);
 });
 
 Route::post('/midtrans/webhook', [MidtransWebhookController::class, 'handle']);

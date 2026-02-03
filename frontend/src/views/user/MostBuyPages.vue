@@ -36,11 +36,12 @@ const sortOptions = [
 ];
 
 const rawProducts = ref([]);
-const categoryOptions = ref([]); 
+const categoryOptions = ref([]);
 const loading = ref(true);
 const activeDropdown = ref(null);
 const currentPage = ref(1);
 const itemsPerPage = 10;
+const flashSaleItems = ref([]);
 
 const filters = reactive({
   status: null,
@@ -50,17 +51,71 @@ const filters = reactive({
   sortBy: 'popular'
 });
 
+const fetchFlashSaleData = async () => {
+  try {
+    const res = await api.get('/public/flash-sale');
+
+    if (!res.data.data) {
+      flashSaleItems.value = [];
+      return;
+    }
+
+    const detail = await api.get(`/public/flash-sale/${res.data.data.id}`);
+
+    flashSaleItems.value = detail.data.data.items.map(item => ({
+      id: item.id,
+      original_price: item.original_price,
+      discount_price: item.discount_price,
+      stock: item.flash_sale_stock,
+      sold: item.sold_count,
+      remaining: item.flash_sale_stock - item.sold_count
+    }));
+
+  } catch (error) {
+    console.error("Gagal memuat flash sale:", error);
+    flashSaleItems.value = [];
+  }
+};
+
 const fetchData = async () => {
   try {
     loading.value = true;
 
-    const [resProducts, resCategories] = await Promise.all([
-      api.get('/public/items'),
+    const [_, resProducts, resCategories] = await Promise.all([
+      fetchFlashSaleData(),
+      api.get('/public/most-buy'),
       api.get('/public/categories')
     ]);
 
     const allItems = resProducts.data.data;
-    rawProducts.value = allItems.filter(item => item.status_produk !== 'non_aktif');
+
+    const processedItems = allItems.map(item => {
+      const fsItem = flashSaleItems.value.find(fs => fs.id === item.id);
+
+      if (fsItem) {
+        return {
+          ...item,
+          price: fsItem.original_price,
+          isFlashSaleSoldOut: fsItem.remaining <= 0,
+          isGlobalSoldOut: item.total_stock <= 0,
+          flash_sale: {
+            discount_price: fsItem.discount_price,
+            stock: fsItem.stock,
+            sold: fsItem.sold,
+            remaining: fsItem.remaining
+          }
+        };
+      } else {
+        return {
+          ...item,
+          flash_sale: null,
+          isFlashSaleSoldOut: false,
+          isGlobalSoldOut: item.total_stock <= 0
+        };
+      }
+    });
+
+    rawProducts.value = processedItems.filter(item => item.status_produk !== 'non_aktif');
 
     categoryOptions.value = resCategories.data.data.map(cat => ({
       value: cat.id,
@@ -108,16 +163,21 @@ const filteredProducts = computed(() => {
     );
   }
 
+
   if (filters.sortBy === 'price_low') {
-    result.sort((a, b) => a.price - b.price);
-  } else if (filters.sortBy === 'price_high') {
-    result.sort((a, b) => b.price - a.price);
-  } else {
     result.sort((a, b) => {
-      if (a.status_produk === 'terbatas' && b.status_produk !== 'terbatas') return -1;
-      if (a.status_produk !== 'terbatas' && b.status_produk === 'terbatas') return 1;
-      return b.id - a.id;
+      const priceA = a.flash_sale ? a.flash_sale.discount_price : a.price;
+      const priceB = b.flash_sale ? b.flash_sale.discount_price : b.price;
+      return priceA - priceB;
     });
+  } else if (filters.sortBy === 'price_high') {
+    result.sort((a, b) => {
+      const priceA = a.flash_sale ? a.flash_sale.discount_price : a.price;
+      const priceB = b.flash_sale ? b.flash_sale.discount_price : b.price;
+      return priceB - priceA;
+    });
+  } else {
+    result.sort((a, b) => b.total_sold - a.total_sold);
   }
 
   return result;

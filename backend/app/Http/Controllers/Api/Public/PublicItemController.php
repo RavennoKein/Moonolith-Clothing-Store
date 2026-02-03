@@ -11,7 +11,7 @@ class PublicItemController extends Controller
     public function index()
     {
         $items = Item::with('variants', 'category')
-            ->where('status_produk', 'aktif')
+            ->where('status_produk','!=', 'non_aktif')
             ->orderByDesc('created_at')
             ->get();
 
@@ -57,7 +57,7 @@ class PublicItemController extends Controller
                         ->where('end_time', '>=', $now);
                 })->with('flashSale');
             }
-        ])->where('status_produk', 'aktif')
+        ])->where('status_produk','!=', 'aktif')
             ->findOrFail($id);
 
         $sizes = $item->variants->groupBy('size')->map(function ($variants, $size) {
@@ -105,7 +105,7 @@ class PublicItemController extends Controller
             'data' => [
                 'id' => $item->id,
                 'name' => $item->name,
-                'category_name' => $item->category->name ?? 'Collection', // Tambahan info kategori
+                'category_name' => $item->category->name,
                 'image_url' => $item->image_url ? asset('storage/' . $item->image_url) : null,
                 'price' => $item->price,
                 'gender' => $item->gender,

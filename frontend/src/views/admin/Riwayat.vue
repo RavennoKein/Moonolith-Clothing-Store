@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import Sidebar from '../../components/Sidebar.vue';
-import { ArrowUp, ArrowDown, Search, List, FileText } from 'lucide-vue-next';
+import { ArrowUp, ArrowDown, Search, List, FileText, Printer } from 'lucide-vue-next';
 import api from '@/services/api';
 import Swal from 'sweetalert2';
 
@@ -97,11 +97,12 @@ onMounted(() => {
 
 const getStatusBadgeClass = (status) => {
     switch (status) {
-        case 'Done': case 'Delivered': return 'bg-green-500';
+        case 'Done': return 'bg-green-500';
         case 'On Road': case 'Shipped': return 'bg-orange-500';
         case 'Cancelled': return 'bg-red-500';
         case 'Pending': return 'bg-yellow-500';
         case 'Paid': return 'bg-blue-500';
+        case 'Delivered': return 'bg-amber-500';
         default: return 'bg-gray-500';
     }
 }
@@ -170,6 +171,80 @@ const updateOrderStatus = async (orderId, status) => {
     }
 };
 
+const downloadReport = async () => {
+    const { value: dates } = await Swal.fire({
+        title: 'Cetak Laporan Penjualan',
+        html: `
+            <div class="flex flex-col gap-3 text-left">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Awal</label>
+                    <input id="swal-start" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Akhir</label>
+                    <input id="swal-end" type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Cetak PDF',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#2563eb',
+        preConfirm: () => {
+            const startDate = document.getElementById('swal-start').value;
+            const endDate = document.getElementById('swal-end').value;
+            if (!startDate || !endDate) {
+                Swal.showValidationMessage('Harap pilih kedua tanggal!');
+            }
+            return { startDate, endDate };
+        }
+    });
+
+    if (!dates) return;
+
+    Swal.fire({
+        title: 'Membuat Laporan...',
+        text: 'Mohon tunggu sebentar',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const response = await api.get('/admin/orders/report', {
+            params: {
+                start_date: dates.startDate,
+                end_date: dates.endDate
+            },
+            responseType: 'blob'
+        });
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `Laporan_Penjualan_${dates.startDate}_${dates.endDate}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Berhasil',
+            text: 'Laporan berhasil diunduh.',
+            timer: 2000,
+            showConfirmButton: false
+        });
+
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Gagal',
+            text: 'Terjadi kesalahan saat membuat laporan.'
+        });
+    }
+};
+
 </script>
 
 <template>
@@ -182,21 +257,29 @@ const updateOrderStatus = async (orderId, status) => {
 
             <div class="bg-white rounded-xl shadow-lg p-6">
 
-                <div class="flex flex-col md:flex-row justify-between items-center mb-6 space-y-3 md:space-y-0">
-                    <div class="flex items-center space-x-2 text-gray-600">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 space-y-3 md:space-y-0 gap-4">
+                    <div class="flex items-center space-x-2 text-gray-600 w-full md:w-auto">
                         <select v-model.number="itemsPerPage"
                             class="group p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-blue-400 hover:shadow-sm transition-all duration-200 cursor-pointer">
                             <option value="5">5</option>
                             <option value="10">10</option>
                             <option value="20">20</option>
                         </select>
-                        <span class="text-sm font-medium">entries per page</span>
+                        <span class="text-sm font-medium whitespace-nowrap">entries per page</span>
                     </div>
 
-                    <div class="w-full md:w-auto relative">
-                        <input type="text" v-model="searchTerm" placeholder="Cari transaksi..."
-                            class="group w-full md:w-64 p-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-blue-400 hover:shadow-sm">
-                        <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                    <div class="flex flex-col sm:flex-row w-full md:w-auto gap-3">
+                        <div class="relative grow sm:grow-0">
+                            <input type="text" v-model="searchTerm" placeholder="Cari transaksi..."
+                                class="group w-full md:w-64 p-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-blue-400 hover:shadow-sm">
+                            <Search class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                        </div>
+
+                        <button @click="downloadReport"
+                            class="flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg active:scale-95 whitespace-nowrap">
+                            <Printer class="w-4 h-4" />
+                            <span class="text-sm font-bold">Cetak Laporan</span>
+                        </button>
                     </div>
                 </div>
 
@@ -236,7 +319,7 @@ const updateOrderStatus = async (orderId, status) => {
                                 <td class="px-4 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{{ tx.no_resi }}
                                 </td>
                                 <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">{{ tx.name
-                                }}</td>
+                                    }}</td>
                                 <td class="px-4 py-4 max-w-xs truncate text-sm text-gray-500" :title="tx.address">{{
                                     tx.address }}</td>
                                 <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{{ tx.tanggal_beli }}</td>
@@ -361,7 +444,7 @@ const updateOrderStatus = async (orderId, status) => {
                 <div class="flex justify-between items-center py-4 border-t-2 border-dashed border-gray-100">
                     <span class="text-sm font-bold text-gray-500 uppercase">Grand Total</span>
                     <span class="text-2xl font-black text-green-700">{{ formatRupiah(activeItemDetails.total_harga)
-                        }}</span>
+                    }}</span>
                 </div>
 
                 <div class="mt-8">

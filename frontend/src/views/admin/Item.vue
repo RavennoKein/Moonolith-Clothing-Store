@@ -615,7 +615,7 @@ const goToItemDetail = (id) => {
                                                         <span v-for="s in item.sizes" :key="s.size">
                                                             <span v-for="c in s.colors" :key="c.color">
                                                                 <span v-if="c.stock === 0"
-                                                                    class="inline-flex items-center px-2 py-1 bg-white border border-orange-300 text-orange-700 text-xs rounded-md">
+                                                                    class="inline-flex items-center px-2 py-1 bg-white border border-orange-300 text-orange-700 text-xs rounded-md capitalize">
                                                                     <span class="w-2 h-2 rounded-full mr-1"
                                                                         :style="{ backgroundColor: getColorHex(c.color) }"></span>
                                                                     {{ s.size }} - {{ c.color }}

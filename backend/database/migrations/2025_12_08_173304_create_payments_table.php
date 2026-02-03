@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('payment_gateway'); // midtrans / xendit / tripay
             $table->string('transaction_id')->unique(); // ID dari gateway
             $table->string('payment_method'); // qris / va_bca / va_bri / dll
-            $table->decimal('amount', 15, 2); // harus sama dg total_amount
+            $table->decimal('amount', 15, 2); 
             $table->enum('payment_status', [
                 'pending',
                 'paid',

@@ -953,7 +953,7 @@ const highlightEmptyVariants = computed(() => {
                     v-if="item.sizes?.find(s => s.size === selectedUpdateSize)?.colors?.find(c => c.color === name && c.stock === 0)"
                     class="absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border border-white"></div>
                 </div>
-                <label class="text-sm font-semibold cursor-pointer" :class="item.sizes?.find(s => s.size === selectedUpdateSize)?.colors?.find(c => c.color === name && c.stock === 0)
+                <label class="text-sm font-semibold cursor-pointer capitalize" :class="item.sizes?.find(s => s.size === selectedUpdateSize)?.colors?.find(c => c.color === name && c.stock === 0)
                   ? 'text-red-700' : 'text-slate-700'">
                   {{ name }}
                   <span
