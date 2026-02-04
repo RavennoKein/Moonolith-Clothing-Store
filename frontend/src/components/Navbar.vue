@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { CircleUserRound, ShoppingCart, CircleStar, Search, Menu, X } from 'lucide-vue-next';
+import { CircleUserRound, ShoppingCart, CircleStar, Search, Menu, X, LogOut } from 'lucide-vue-next';
 import { useRouter, useRoute } from 'vue-router';
 import { useCart } from '@/composables/useCart';
+import Swal from 'sweetalert2';
 
 const router = useRouter();
 const route = useRoute();
@@ -12,6 +13,37 @@ const isLoggedIn = ref(false);
 const isScrolled = ref(false);
 const searchQuery = ref('');
 const isMobileMenuOpen = ref(false);
+
+const handleLogout = async () => {
+  const result = await Swal.fire({
+    title: 'Logout?',
+    text: "Anda akan keluar dari sesi ini.",
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonColor: '#0f172a',
+    cancelButtonColor: '#94a3b8',
+    confirmButtonText: 'Ya, Logout',
+    cancelButtonText: 'Batal'
+  });
+
+  if (result.isConfirmed) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    isLoggedIn.value = false;
+
+    if (typeof fetchCartCount === 'function') {
+    }
+
+    await Swal.fire({
+      icon: 'success',
+      title: 'Berhasil Logout',
+      showConfirmButton: false,
+      timer: 1500
+    });
+
+    router.push({ name: 'Login' });
+  }
+};
 
 const handleSearch = () => {
   if (searchQuery.value.trim()) {
@@ -27,9 +59,13 @@ const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value;
 };
 
-onMounted(() => {
+const checkLoginStatus = () => {
   const token = localStorage.getItem('token');
   isLoggedIn.value = !!token;
+};
+
+onMounted(() => {
+  checkLoginStatus();
 
   if (isLoggedIn.value) {
     fetchCartCount();
@@ -42,6 +78,10 @@ onMounted(() => {
   if (route.query.q) {
     searchQuery.value = route.query.q;
   }
+});
+
+watch(() => route.path, () => {
+  checkLoginStatus();
 });
 </script>
 
@@ -108,11 +148,21 @@ onMounted(() => {
 
           <div :class="['h-6 w-px hidden md:block', isScrolled ? 'bg-white/20' : 'bg-slate-200']"></div>
 
-          <div class="flex items-center">
-            <router-link v-if="isLoggedIn" :to="{ name: 'Profile' }"
-              :class="['transition-colors', isScrolled ? 'text-white hover:text-blue-300' : 'text-slate-700 hover:text-blue-900']">
-              <CircleUserRound class="w-6 h-6 md:w-7 md:h-7" />
-            </router-link>
+          <div class="flex items-center space-x-3 md:space-x-4"> <template v-if="isLoggedIn">
+              <div class="flex items-center gap-2 md:gap-4">
+                <router-link :to="{ name: 'Profile' }"
+                  :class="['transition-all hover:scale-110', isScrolled ? 'text-white hover:text-blue-300' : 'text-slate-700 hover:text-blue-900']">
+                  <CircleUserRound class="w-6 h-6 md:w-7 md:h-7" />
+                </router-link>
+
+                <button @click="handleLogout" :class="['p-1.5 rounded-lg transition-all flex items-center gap-1 group',
+                  isScrolled ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-100 text-slate-700']">
+                  <LogOut class="w-5 h-5 group-hover:text-red-500 transition-colors" />
+                  <span
+                    class="hidden lg:inline text-[10px] font-black uppercase tracking-wider group-hover:text-red-500">Keluar</span>
+                </button>
+              </div>
+            </template>
 
             <router-link v-else :to="{ name: 'Login' }" :class="[
               'flex items-center space-x-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full font-bold text-[10px] md:text-xs uppercase transition-all',

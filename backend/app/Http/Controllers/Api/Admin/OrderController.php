@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use Midtrans\Config;
 use App\Models\Order;
+use App\Models\Review;
 use Midtrans\Transaction;
 use App\Models\ItemVariant;
 use Illuminate\Http\Request;
@@ -225,14 +226,21 @@ class OrderController extends Controller
             'name' => $order->receiver_name,
             'phone' => $order->receiver_phone,
             'address' => $order->address . ', ' . $order->city . ', ' . $order->province,
-            'items' => $order->items->map(function ($detail) {
+            'items' => $order->items->map(function ($detail) use ($order) {
+                $isReviewed = Review::where('order_id', $order->id)
+                    ->where('item_id', $detail->item_id)
+                    ->exists();
                 return [
                     'id' => $detail->id,
+                    'item_id' => $detail->item_id,
                     'qty' => $detail->quantity,
                     'price' => $detail->price,
-                    'product_name' => $detail->item ? $detail->item->name : 'Produk tidak tersedia',
-                    'product_image' => $detail->item ? asset('storage/' . $detail->item->image_url) : null,
-                    'variant' => $detail->variant ? $detail->variant->name : '-',
+                    'product_name' => $detail->item?->name,
+                    'product_image' => $detail->item
+                        ? asset('storage/' . $detail->item->image_url)
+                        : null,
+                    'variant' => $detail->variant,
+                    'is_reviewed' => $isReviewed,
                 ];
             })
         ];

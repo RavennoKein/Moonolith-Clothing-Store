@@ -22,6 +22,20 @@ const isFavLoading = ref(false);
 const isAddingToCart = ref(false);
 const { fetchCartCount } = useCart();
 const isBuyingNow = ref(false);
+const ratingSummary = ref({
+  average_rating: 0,
+  total_reviews: 0,
+  breakdown: {
+    1: { count: 0, percent: 0 },
+    2: { count: 0, percent: 0 },
+    3: { count: 0, percent: 0 },
+    4: { count: 0, percent: 0 },
+    5: { count: 0, percent: 0 },
+  }
+});
+const reviews = ref([]);
+const reviewPage = ref(1);
+const isLoadingReviews = ref(false);
 
 const fetchProduct = async () => {
   loading.value = true;
@@ -31,7 +45,34 @@ const fetchProduct = async () => {
 
     product.value = data;
 
-    relatedProducts.value = data.related_products || [];
+    const rawRelated = data.related_products || [];
+
+    relatedProducts.value = rawRelated.map(item => {
+      if (item.flash_sale) {
+        const stock = item.flash_sale.flash_sale_stock || 0;
+        const sold = item.flash_sale.sold_count || 0;
+        const remaining = stock - sold;
+
+        return {
+          ...item,
+          flash_sale: {
+            ...item.flash_sale,
+            stock: stock,
+            sold: sold,
+            remaining: remaining
+          },
+          isFlashSaleSoldOut: remaining <= 0,
+          isGlobalSoldOut: item.total_stock <= 0
+        };
+      }
+
+      return {
+        ...item,
+        flash_sale: null,
+        isFlashSaleSoldOut: false,
+        isGlobalSoldOut: item.total_stock <= 0
+      };
+    });
 
   } catch (error) {
     console.error("Gagal memuat produk", error);
@@ -40,11 +81,41 @@ const fetchProduct = async () => {
   }
 };
 
-watch(() => route.params.id, (newId) => {
-  if (newId) fetchProduct();
+const fetchRatingSummary = async () => {
+  try {
+    const res = await api.get(`/public/items/${route.params.id}/rating`);
+    ratingSummary.value = res.data;
+  } catch (e) {
+    console.error('Gagal memuat rating summary', e);
+  }
+};
+
+const fetchReviews = async () => {
+  isLoadingReviews.value = true;
+  try {
+    const res = await api.get(`/public/items/${route.params.id}/reviews?page=${reviewPage.value}`);
+    reviews.value = res.data.data;
+  } catch (e) {
+    console.error('Gagal memuat reviews', e);
+  } finally {
+    isLoadingReviews.value = false;
+  }
+};
+
+
+watch(() => route.params.id, async (newId) => {
+  if (newId) {
+    await fetchProduct();
+    await fetchRatingSummary();
+    await fetchReviews();
+  };
 });
 
-onMounted(fetchProduct);
+onMounted(async () => {
+  await fetchProduct();
+  await fetchRatingSummary();
+  await fetchReviews();
+});
 
 const addToCart = async () => {
   const token = localStorage.getItem('token');
@@ -352,6 +423,26 @@ const buyNow = async () => {
     isBuyingNow.value = false;
   }
 };
+
+const fullStars = computed(() => {
+  return Math.round(ratingSummary.value.average_rating || 0);
+});
+
+const formatDateTime = (dateString) => {
+  const date = new Date(dateString);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  return `${hours}:${minutes} ${day}-${month}-${year}`;
+};
+
+const getStarPercentage = (rating, starIndex) => {
+  const val = rating - (starIndex - 1);
+  return Math.min(Math.max(val, 0), 1) * 100;
+};
 </script>
 
 <template>
@@ -429,8 +520,20 @@ const buyNow = async () => {
 
                 <div class="h-4 w-px bg-slate-200 mx-1"></div>
 
-                <div class="flex text-amber-400 gap-0.5">
-                  <Star v-for="s in 5" :key="s" class="w-3 h-3 fill-current" />
+                <div class="flex items-center gap-1">
+                  <div class="flex text-amber-400 relative">
+                    <div v-for="i in 5" :key="i" class="relative w-3 h-3 mr-0.5">
+                      <Star class="absolute inset-0 w-3 h-3 text-slate-200 fill-slate-200" />
+
+                      <div class="absolute inset-y-0 left-0 overflow-hidden"
+                        :style="{ width: getStarPercentage(ratingSummary.average_rating, i) + '%' }">
+                        <Star class="w-3 h-3 text-amber-400 fill-amber-400" />
+                      </div>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-slate-500 font-bold ml-1">
+                    {{ ratingSummary.average_rating }} ({{ ratingSummary.total_reviews }})
+                  </span>
                 </div>
               </div>
 
@@ -637,6 +740,121 @@ const buyNow = async () => {
           </div>
         </div>
       </div>
+
+      <section class="mt-32 border-t border-slate-200/60 pt-20">
+        <div class="flex items-center gap-4 mb-10">
+          <div class="h-10 w-1.5 bg-indigo-600 rounded-full"></div>
+          <h2 class="text-3xl md:text-4xl font-black uppercase italic tracking-tighter text-slate-900">
+            Rating & Ulasan
+          </h2>
+        </div>
+
+        <div
+          class="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] mb-14">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-10 items-center">
+
+            <div
+              class="flex flex-col items-center justify-center text-center border-b md:border-b-0 md:border-r border-slate-100 pb-8 md:pb-0 md:pr-8">
+              <span class="text-7xl font-black text-slate-900 tracking-tighter leading-none">
+                {{ ratingSummary.average_rating }}
+              </span>
+
+              <div class="flex items-center gap-1 my-3">
+                <div v-for="i in 5" :key="i" class="relative w-5 h-5">
+                  <Star class="absolute inset-0 w-5 h-5 text-slate-200 fill-slate-200" />
+
+                  <div class="absolute inset-y-0 left-0 overflow-hidden"
+                    :style="{ width: getStarPercentage(ratingSummary.average_rating, i) + '%' }">
+                    <Star class="w-5 h-5 text-amber-400 fill-amber-400" />
+                  </div>
+                </div>
+              </div>
+
+              <span class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                Berdasarkan {{ ratingSummary.total_reviews }} Ulasan
+              </span>
+            </div>
+
+            <div class="md:col-span-2 space-y-3">
+              <div v-for="i in 5" :key="i" class="flex items-center gap-4">
+                <div class="flex items-center gap-1 w-12 shrink-0">
+                  <span class="font-bold text-slate-700 text-sm">{{ 6 - i }}</span>
+                  <Star class="w-3 h-3 text-slate-400 fill-slate-400" />
+                </div>
+
+                <div class="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-full bg-slate-900 rounded-full transition-all duration-1000 ease-out"
+                    :style="{ width: (ratingSummary.breakdown?.[6 - i]?.percent || 0) + '%' }"></div>
+                </div>
+
+                <span class="w-10 text-xs text-slate-400 font-medium text-right">
+                  {{ ratingSummary.breakdown?.[6 - i]?.count || 0 }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="isLoadingReviews" class="flex flex-col items-center justify-center py-20 space-y-4">
+          <Loader2 class="w-8 h-8 animate-spin text-indigo-600" />
+          <p class="text-slate-400 text-sm font-medium animate-pulse">Sedang memuat ulasan...</p>
+        </div>
+
+        <div v-else class="space-y-6">
+          <div v-if="reviews.length === 0" class="text-center py-10">
+            <p class="text-slate-400 italic">Belum ada ulasan untuk produk ini.</p>
+          </div>
+
+          <div v-for="(rv, idx) in reviews" :key="idx"
+            class="group bg-white p-6 md:p-8 rounded-3xl border border-slate-100 hover:border-indigo-100 hover:shadow-[0_10px_30px_-10px_rgba(79,70,229,0.1)] transition-all duration-300">
+
+            <div class="flex flex-col sm:flex-row sm:items-start gap-4">
+              <div
+                class="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 text-indigo-600 font-black text-lg shadow-sm">
+                {{ rv.user.name.charAt(0).toUpperCase() }}
+              </div>
+
+              <div class="flex-1 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-slate-900 text-base">
+                        {{ rv.user.name }}
+                      </span>
+                      <span
+                        class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
+                        <CheckCircle2 class="w-3 h-3" /> Verified
+                      </span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 font-medium mt-1 block uppercase tracking-wider">
+                      {{ formatDateTime(rv.created_at) }}
+                    </span>
+                  </div>
+
+                  <div class="flex items-center gap-0.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                    <div v-for="i in 5" :key="i" class="relative w-3.5 h-3.5">
+                      <Star class="absolute inset-0 w-3.5 h-3.5 text-slate-200 fill-slate-200" />
+
+                      <div class="absolute inset-y-0 left-0 overflow-hidden"
+                        :style="{ width: getStarPercentage(rv.rating, i) + '%' }">
+                        <Star class="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="relative">
+                  <p
+                    class="text-slate-600 leading-relaxed text-sm md:text-base font-medium bg-slate-50/50 p-4 rounded-xl rounded-tl-none border border-slate-100/50">
+                    "{{ rv.review || 'Tidak ada komentar tertulis.' }}"
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
 
       <section class="mt-40 border-t border-slate-200/60 pt-20">
         <div class="flex flex-col items-center mb-16 space-y-4">

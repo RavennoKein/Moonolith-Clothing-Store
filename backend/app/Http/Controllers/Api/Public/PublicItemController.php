@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Public;
 
 use App\Models\Item;
+use App\Models\Review;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 
@@ -11,7 +12,7 @@ class PublicItemController extends Controller
     public function index()
     {
         $items = Item::with('variants', 'category')
-            ->where('status_produk','!=', 'non_aktif')
+            ->where('status_produk', '!=', 'non_aktif')
             ->orderByDesc('created_at')
             ->get();
 
@@ -57,7 +58,7 @@ class PublicItemController extends Controller
                         ->where('end_time', '>=', $now);
                 })->with('flashSale');
             }
-        ])->where('status_produk','!=', 'aktif')
+        ])->where('status_produk', '!=', 'non_aktif')
             ->findOrFail($id);
 
         $sizes = $item->variants->groupBy('size')->map(function ($variants, $size) {
@@ -77,7 +78,7 @@ class PublicItemController extends Controller
 
         $relatedItems = Item::where('category_id', $item->category_id)
             ->where('id', '!=', $item->id)
-            ->where('status_produk', 'aktif')
+            ->where('status_produk', '!=', 'non_aktif')
             ->inRandomOrder()
             ->limit(5)
             ->get();
@@ -93,9 +94,14 @@ class PublicItemController extends Controller
                 'name' => $relItem->name,
                 'image_url' => $relItem->image_url ? asset('storage/' . $relItem->image_url) : null,
                 'price' => $relItem->price,
+                'created_at' => $relItem->created_at,
+                'total_stock' => $relItem->totalStock(),
                 'flash_sale' => $relFlash ? [
                     'discount_price' => $relFlash->discount_price,
-                    'discount_percentage' => round((($relItem->price - $relFlash->discount_price) / $relItem->price) * 100)
+                    'discount_percentage' => round((($relItem->price - $relFlash->discount_price) / $relItem->price) * 100),
+                    'flash_sale_stock' => $relFlash->flash_sale_stock,
+                    'sold_count' => $relFlash->sold_count,
+                    'remaining' => max($relFlash->flash_sale_stock - $relFlash->sold_count, 0)
                 ] : null
             ];
         });
@@ -117,10 +123,58 @@ class PublicItemController extends Controller
                 'flash_sale' => $isFlashSaleValid ? [
                     'discount_price' => $flashSaleItem->discount_price,
                     'remaining_stock' => max($flashSaleItem->flash_sale_stock - $flashSaleItem->sold_count, 0),
+                    'flash_sale_stock' => $flashSaleItem->flash_sale_stock,
+                    'sold_count' => $flashSaleItem->sold_count,
                     'discount_percentage' => round((($item->price - $flashSaleItem->discount_price) / $item->price) * 100)
                 ] : null,
                 'related_products' => $formattedRelated
             ]
         ]);
     }
+
+    public function ratingSummary($itemId)
+    {
+        $item = Item::findOrFail($itemId);
+
+        $total = $item->reviews()->count();
+
+        $breakdown = Review::where('item_id', $itemId)
+            ->selectRaw('rating, COUNT(*) as count')
+            ->groupBy('rating')
+            ->pluck('count', 'rating');
+
+        $formatted = [];
+        for ($i = 5; $i >= 1; $i--) {
+            $count = $breakdown[$i] ?? 0;
+            $formatted[$i] = [
+                'count' => $count,
+                'percent' => $total > 0 ? round(($count / $total) * 100) : 0
+            ];
+        }
+
+        return response()->json([
+            'average_rating' => round($item->reviews()->avg('rating') ?? 0, 1),
+            'total_reviews' => $total,
+            'breakdown' => $formatted
+        ]);
+    }
+
+    public function reviews($itemId)
+    {
+        $reviews = Review::with('user:id,name')
+            ->where('item_id', $itemId)
+            ->latest()
+            ->paginate(5);
+
+        return response()->json([
+            'success' => true,
+            'data' => $reviews->items(),
+            'meta' => [
+                'current_page' => $reviews->currentPage(),
+                'last_page' => $reviews->lastPage(),
+                'total' => $reviews->total()
+            ]
+        ]);
+    }
+
 }

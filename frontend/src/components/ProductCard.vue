@@ -70,7 +70,7 @@ const cardProduct = computed(() => {
           </div>
         </div>
 
-        <div class="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
+        <div class="absolute top-3 left-3 flex flex-col items-start gap-1.5 z-10">
           <span v-if="cardProduct.discount"
             class="bg-rose-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg shadow-lg shadow-rose-600/20 backdrop-blur-sm">
             -{{ cardProduct.discount }}%

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Admin\CartController;
 use App\Http\Controllers\Api\Admin\ItemController;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\OrderController;
+use App\Http\Controllers\Api\User\ReviewController;
 use App\Http\Controllers\Api\User\ProfileController;
 use App\Http\Controllers\Api\User\CheckoutController;
 use App\Http\Controllers\Api\User\FavoriteController;
@@ -78,6 +79,7 @@ Route::middleware(['api', 'auth:sanctum', 'role:user'])->prefix('user')->group(f
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel']);
     Route::get('/orders/{invoice}/pdf', [OrderController::class, 'downloadPdf']);
+    Route::post('/reviews', [ReviewController::class, 'store']);
 });
 
 Route::prefix('public')->group(function () {
@@ -87,6 +89,8 @@ Route::prefix('public')->group(function () {
     Route::get('/items/{id}', [PublicItemController::class, 'show']);
     Route::get('/categories', [CategoryController::class, 'index']);
     Route::get('/most-buy', [MostBuyController::class, 'index']);
+    Route::get('/items/{id}/rating', [PublicItemController::class, 'ratingSummary']);
+    Route::get('/items/{id}/reviews', [PublicItemController::class, 'reviews']);
 });
 
 Route::post('/midtrans/webhook', [MidtransWebhookController::class, 'handle']);

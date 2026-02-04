@@ -13,16 +13,69 @@ const orderDetails = ref(null);
 const isLoading = ref(true);
 const errorMessage = ref('');
 const isCancelling = ref(false);
-const isDownloading = ref(false); 
+const isDownloading = ref(false);
+const showRatingModal = ref(false);
+const selectedItem = ref(null);
+const ratingForm = ref({
+  rating: 0,
+  review: ''
+});
+const isSubmittingRating = ref(false);
 
-const MIDTRANS_CLIENT_KEY = 'Mid-client-k54WL5nGvcG2Xkr8'; 
-const IS_PRODUCTION = false; 
+const MIDTRANS_CLIENT_KEY = 'Mid-client-k54WL5nGvcG2Xkr8';
+const IS_PRODUCTION = false;
 
 const formatRupiah = (number) => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency', currency: 'IDR', minimumFractionDigits: 0
   }).format(number);
 };
+
+const openRatingModal = (item) => {
+  console.log('Selected item:', item);
+  selectedItem.value = item;
+  ratingForm.value = { rating: 0, review: '' };
+  showRatingModal.value = true;
+};
+
+const closeRatingModal = () => {
+  showRatingModal.value = false;
+  selectedItem.value = null;
+};
+
+const submitRating = async () => {
+  if (ratingForm.value.rating === 0) {
+    return Swal.fire('Oops', 'Silakan beri rating terlebih dahulu', 'warning');
+  }
+
+  isSubmittingRating.value = true;
+
+  try {
+    await api.post('/user/reviews', {
+      order_id: orderDetails.value.id,
+      item_id: selectedItem.value.item_id,
+      rating: ratingForm.value.rating,
+      review: ratingForm.value.review
+    });
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Terima kasih!',
+      text: 'Ulasan kamu berhasil dikirim',
+      timer: 2000,
+      showConfirmButton: false
+    });
+
+    closeRatingModal();
+    fetchOrder();
+
+  } catch (e) {
+    Swal.fire('Gagal', e.response?.data?.message || 'Gagal mengirim ulasan', 'error');
+  } finally {
+    isSubmittingRating.value = false;
+  }
+};
+
 
 const fetchOrder = async () => {
   try {
@@ -286,11 +339,28 @@ const statusLabel = computed(() => {
                   class="w-full h-full object-cover" />
               </div>
               <div class="flex-1">
-                <h4 class="text-sm font-medium text-slate-900">{{ item.product?.name || item.product_name }}</h4>
-                <p class="text-xs text-slate-500 mt-0.5">Qty: {{ item.qty }}</p>
+                <div>
+                  <h3 class="font-semibold text-slate-900 line-clamp-2">{{ item.product_name }}</h3>
+                  <p class="text-sm text-slate-500">Ukuran: {{ item.variant.size }} <span class="mx-0.5">|</span>
+                    Qty: {{
+                      item.qty }}</p>
+                  <span class="flex items-center gap-1 capitalize">
+                    <span class="w-2 h-2 rounded-full border border-slate-200 shadow-sm"
+                      :style="{ backgroundColor: item.variant.color }"></span>
+                    <p class="text-sm text-slate-500">{{ item.variant.color }}</p>
+                  </span>
+                </div>
               </div>
               <div class="text-right">
                 <p class="text-sm font-bold text-blue-600">{{ formatRupiah(item.price) }}</p>
+                <button v-if="orderDetails.status === 'done' && !item.is_reviewed" @click="openRatingModal(item)"
+                  class="mt-2 text-xs font-bold text-amber-600 hover:underline">
+                  ⭐ Beri Ulasan
+                </button>
+
+                <span v-else-if="item.is_reviewed" class="mt-2 inline-block text-xs text-emerald-600 font-semibold">
+                  ✔ Sudah diulas
+                </span>
               </div>
             </div>
           </div>
@@ -319,6 +389,42 @@ const statusLabel = computed(() => {
 
       </div>
 
+    </div>
+  </div>
+
+  <div v-if="showRatingModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+
+    <div class="bg-white w-full max-w-md rounded-xl shadow-xl p-6 relative">
+      <button @click="closeRatingModal" class="absolute top-3 right-3 text-slate-400 hover:text-slate-600">
+        ✕
+      </button>
+
+      <h3 class="text-lg font-bold text-slate-800 mb-2">
+        Beri Ulasan Produk
+      </h3>
+
+      <p class="text-sm text-slate-500 mb-4">
+        {{ selectedItem?.product?.name || selectedItem?.product_name }}
+      </p>
+
+      <div class="flex gap-2 mb-4">
+        <button v-for="i in 5" :key="i" @click="ratingForm.rating = i" class="focus:outline-none">
+          <svg class="w-8 h-8" :class="i <= ratingForm.rating ? 'text-amber-400 fill-current' : 'text-slate-300'"
+            viewBox="0 0 20 20">
+            <path
+              d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.957a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.37 2.449a1 1 0 00-.364 1.118l1.287 3.957c.3.921-.755 1.688-1.54 1.118l-3.37-2.449a1 1 0 00-1.176 0l-3.37 2.449c-.784.57-1.838-.197-1.539-1.118l1.287-3.957a1 1 0 00-.364-1.118L2.075 9.384c-.783-.57-.38-1.81.588-1.81h4.162a1 1 0 00.95-.69l1.286-3.957z" />
+          </svg>
+        </button>
+      </div>
+
+      <textarea v-model="ratingForm.review" placeholder="Tulis ulasan (opsional)"
+        class="w-full border border-slate-200 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-amber-400"
+        rows="3"></textarea>
+
+      <button @click="submitRating" :disabled="isSubmittingRating"
+        class="w-full mt-4 bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg transition-all">
+        {{ isSubmittingRating ? 'Mengirim...' : 'Kirim Ulasan' }}
+      </button>
     </div>
   </div>
 </template>

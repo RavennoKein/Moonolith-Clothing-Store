@@ -55,4 +55,19 @@ class Item extends Model
             ->exists();
     }
 
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    public function averageRating()
+    {
+        return round($this->reviews()->avg('rating') ?? 0, 1);
+    }
+
+    public function totalReviews()
+    {
+        return $this->reviews()->count();
+    }
+
 }

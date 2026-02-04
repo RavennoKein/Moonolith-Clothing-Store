@@ -277,11 +277,6 @@ watch(activeTab, (newTab) => {
               </button>
 
               <div class="my-2 border-t border-slate-50"></div>
-
-              <button @click="handleLogout"
-                class="w-full flex items-center px-6 py-4 rounded-2xl text-sm font-black text-red-500 hover:bg-red-50 transition-all group">
-                <LogOut class="w-5 h-5 mr-4 transition-transform group-hover:translate-x-1" /> Keluar Sesi
-              </button>
             </nav>
           </div>
         </aside>
